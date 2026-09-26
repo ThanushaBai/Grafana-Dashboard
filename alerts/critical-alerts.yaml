@@ -1,0 +1,122 @@
+# DEV-601: Critical alerting rules for Nomad, Consul, Vault, and node metrics
+# Format: Prometheus alerting rules (compatible with Prometheus + Alertmanager)
+# To use: reference this file in prometheus.yml under `rule_files:`
+
+groups:
+  - name: node_alerts
+    interval: 1m
+    rules:
+      - alert: NodeDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.instance }} is down"
+          description: "Target {{ $labels.instance }} has been unreachable for more than 5 minutes."
+
+      - alert: HighCPUUtilization
+        expr: |
+          sum(nomad_client_host_cpu_total) by (instance)
+          / (sum(nomad_client_host_cpu_total) by (instance)
+             + sum(nomad_client_host_cpu_idle) by (instance)) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU utilization above 85% for 10 minutes on {{ $labels.instance }}."
+
+      - alert: HighMemoryUtilization
+        expr: |
+          sum(nomad_client_host_memory_used) by (instance)
+          / sum(nomad_client_host_memory_total) by (instance) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory on {{ $labels.instance }}"
+          description: "Memory utilization above 90% for 10 minutes on {{ $labels.instance }}."
+
+      - alert: HighDiskUtilization
+        expr: |
+          sum(nomad_client_host_disk_used) by (instance)
+          / sum(nomad_client_host_disk_size) by (instance) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk utilization above 85% for 10 minutes on {{ $labels.instance }}."
+
+  - name: nomad_alerts
+    interval: 1m
+    rules:
+      - alert: NomadJobFailures
+        expr: nomad_nomad_job_summary_failed > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nomad job failures detected"
+          description: "There are {{ $value }} failed Nomad jobs."
+
+      - alert: NomadBlockedAllocations
+        expr: nomad_client_allocations_blocked > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blocked Nomad allocations"
+          description: "{{ $value }} allocations are blocked on {{ $labels.instance }}."
+
+  - name: consul_alerts
+    interval: 1m
+    rules:
+      - alert: ConsulUnhealthy
+        expr: consul_autopilot_healthy == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consul cluster is unhealthy"
+          description: "Consul Autopilot has reported an unhealthy state for more than 2 minutes."
+
+      - alert: ConsulNoRaftLeader
+        expr: consul_raft_leader_lastContact != 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consul has no Raft leader"
+          description: "A Consul node has not contacted the Raft leader recently."
+
+  - name: vault_alerts
+    interval: 1m
+    rules:
+      - alert: VaultSealed
+        expr: vault_core_unsealed == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vault instance is sealed"
+          description: "Vault is sealed. Manual unseal is required."
+
+      - alert: VaultAuditLogFailures
+        expr: rate(vault_audit_log_request_failure[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vault audit log failures"
+          description: "Vault is experiencing audit log write failures."
+
+      - alert: VaultHighTokenCount
+        expr: vault_token_count > 5000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vault token count is high"
+          description: "Vault has more than 5000 active tokens."
